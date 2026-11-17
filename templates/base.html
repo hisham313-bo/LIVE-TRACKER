@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YatriPulse</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+body{margin:0;font-family:system-ui,sans-serif;display:flex;flex-direction:column;height:100vh}
+header{background:#0d47a1;color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center}
+header a{color:#fff;margin-left:14px;text-decoration:none}
+main{flex:1;display:flex;min-height:0}
+aside{width:320px;padding:12px;overflow:auto;border-right:1px solid #ddd;box-sizing:border-box}
+#map{flex:1}
+input,select,button{padding:8px;margin:4px 0;width:100%;box-sizing:border-box}
+button{background:#0d47a1;color:#fff;border:0;border-radius:4px;cursor:pointer}
+.item{padding:6px;border-bottom:1px solid #eee;font-size:14px}
+@media(max-width:700px){main{flex-direction:column}aside{width:100%;height:40%}}
+</style></head><body>
+<header><b>🚌 YatriPulse</b><span>{% block nav %}{% endblock %}</span></header>
+<main>{% block body %}{% endblock %}</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script>
+const COLORS=['#e53935','#8e24aa','#1e88e5','#00897b','#f4511e','#6d4c41','#3949ab','#c0ca33'];
+function mkMap(){const m=L.map('map').setView([22.5,79],5);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap'}).addTo(m);return m}
+const busIcon=c=>L.divIcon({html:`<div style="background:${c};color:#fff;border-radius:50%;width:26px;height:26px;text-align:center;line-height:26px;border:2px solid #fff">🚌</div>`,className:'',iconSize:[26,26]});
+function liveMap(map){
+ const R={},B={},meta={};let routes=[];
+ const color=id=>COLORS[id%COLORS.length];
+ function drawRoute(r){routes=routes.filter(x=>x.id!=r.id);routes.push(r);
+  if(R[r.id])map.removeLayer(R[r.id]);
+  const g=L.layerGroup(),pts=r.stops.map(s=>[s.lat,s.lng]);
+  L.polyline(pts,{color:color(r.id),weight:4}).addTo(g);
+  r.stops.forEach(s=>L.circleMarker([s.lat,s.lng],{radius:5,color:color(r.id),fillOpacity:1}).bindTooltip(s.name).addTo(g));
+  g.addTo(map);R[r.id]=g;return pts}
+ function upd(b){if(b.lat==null)return;meta[b.id]=Object.assign(meta[b.id]||{},b);const m=meta[b.id];
+  const r=routes.find(x=>x.id==m.route_id);const txt=`<b>${m.number}</b><br>${r?r.name:''}<br>${Math.round(m.speed||0)} km/h · ${m.live?'LIVE GPS':'demo'}<br>Status: ${m.status||'On time'}${m.off?' ⚠ off route':''}`;
+  window.onBus&&onBus(m);if(B[b.id]){B[b.id].setLatLng([b.lat,b.lng]).setPopupContent(txt)}
+  else B[b.id]=L.marker([b.lat,b.lng],{icon:busIcon(color(m.route_id))}).bindPopup(txt).addTo(map)}
+ const s=io();
+ s.on('bus_update',upd);
+ s.on('route_added',r=>{const p=drawRoute(r);map.fitBounds(p,{padding:[40,40]});window.onRoutes&&onRoutes(routes)});
+ s.on('bus_added',b=>{meta[b.id]=b});
+ s.on('route_removed',d=>{if(R[d.id])map.removeLayer(R[d.id]);routes=routes.filter(x=>x.id!=d.id);window.onRoutes&&onRoutes(routes)});
+ Promise.all([fetch('/api/routes').then(r=>r.json()),fetch('/api/buses').then(r=>r.json())]).then(([rs,bs])=>{
+  rs.forEach(drawRoute);bs.forEach(b=>{meta[b.id]=b});bs.forEach(upd);window.onRoutes&&onRoutes(routes)});
+ return {buses:()=>meta,focus(id){const r=routes.find(x=>x.id==id);if(r)map.fitBounds(r.stops.map(s=>[s.lat,s.lng]),{padding:[40,40]})}}
+}
+</script>{% block script %}{% endblock %}</body></html>

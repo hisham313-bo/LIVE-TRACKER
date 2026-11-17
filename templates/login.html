@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block body %}<div style="margin:60px auto;width:300px"><h3>Admin / Driver Login</h3>
+{% if err %}<p style="color:red">{{err}}</p>{% endif %}
+<form method="post"><input name="username" placeholder="Username" required>
+<input name="password" type="password" placeholder="Password" required><button>Login</button></form>
+<p><a href="/">← Passenger view</a></p></div>{% endblock %}
